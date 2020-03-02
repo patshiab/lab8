@@ -317,5 +317,3 @@ instead?
 
     IntBestInterval.is_empty (IntBestInterval.Interval (4, 3)) ;;
 ......................................................................*)
-
-module IntBestInterval = struct end ;;
