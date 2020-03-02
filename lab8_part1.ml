@@ -201,44 +201,58 @@ MakeInterval above.) **Don't forget to specify the module type.**
 
 module MakeSafeInterval (Endpoint : ORDERED_TYPE) : INTERVAL =
 
+(* The rest of the implementation is just as before. *)
 struct
   type endpoint = Endpoint.t
   type interval =
     | Interval of endpoint * endpoint
     | Empty
+
+  (* create low high -- Returns a new interval covering `low` to
+     `high` inclusive. If `low` > `high`, then the interval is
+     empty. *)
   let create (low : endpoint) (high : endpoint) : interval =
     if Endpoint.compare low high > 0 then Empty
     else Interval (low, high)
-    let is_empty (intvl : interval) : bool =
-      match intvl with
-      | Empty -> true
-      | Interval _ -> false
-    let contains (intvl : interval) (x : Endpoint.t) : bool =
-      match intvl with
-      | Empty -> false
-      | Interval (low, high) ->
-         Endpoint.compare x low >= 0
-         && Endpoint.compare x high <= 0
-    let intersect (intvl1 : interval) (intvl2 : interval) : interval =
-      let ordered x y = if Endpoint.compare x y <= 0 then x, y else y, x in
-      match intvl1, intvl2 with
-      | Empty, _
-      | _, Empty -> Empty
-      | Interval (low1, high1), Interval (low2, high2) ->
-         let (_, low), (high, _)  = ordered low1 low2, ordered high1 high2 in
-         create low high
-    end
-  ;;
+
+  (* is_empty intvl -- Returns true if and only if the `intvl` is
+     empty *)
+  let is_empty (intvl : interval) : bool =
+    match intvl with
+    | Empty -> true
+    | Interval _ -> false
+
+  (* contains intvl x -- Returns true if and only if the value `x`
+     is contained within `intvl` *)
+  let contains (intvl : interval) (x : Endpoint.t) : bool =
+    match intvl with
+    | Empty -> false
+    | Interval (low, high) ->
+      Endpoint.compare x low >= 0
+      && Endpoint.compare x high <= 0
+
+  (* intersect intvl1 intvl2 -- Returns the intersection of the two
+     input intervals *)
+  let intersect (intvl1 : interval) (intvl2 : interval) : interval =
+    let ordered x y = if Endpoint.compare x y <= 0 then x, y else y, x in
+    match intvl1, intvl2 with
+    | Empty, _
+    | _, Empty -> Empty
+    | Interval (low1, high1), Interval (low2, high2) ->
+      let (_, low), (high, _)  = ordered low1 low2, ordered high1 high2 in
+      create low high
+end
+;;
 
 (* We have successfully made our returned module abstract, but believe
-it or not, it is now too abstract. In fact, we have not exposed the
-type of endpoints to the user, meaning we cannot even create intervals
-now. To demonstrate the problem ...
+   it or not, it is now too abstract. In fact, we have not exposed the
+   type of endpoints to the user, meaning we cannot even create intervals
+   now. To demonstrate the problem ...
 
-........................................................................
-Exercise 2C: Create an IntSafeInterval module using the new
-MakeSafeInterval functor.
-......................................................................*)
+   ........................................................................
+   Exercise 2C: Create an IntSafeInterval module using the new
+   MakeSafeInterval functor.
+   ......................................................................*)
 
 module IntSafeInterval =
   MakeSafeInterval
@@ -247,39 +261,113 @@ module IntSafeInterval =
       let compare = Stdlib.compare
     end) ;;
 
-    module MakeBestInterval (Endpoint : ORDERED_TYPE)
-                          : (INTERVAL with type endpoint = Endpoint.t) =
-    struct
-      type endpoint = Endpoint.t
-      type interval = | Interval of endpoint * endpoint
-                      | Empty
+(* Now, try evaluating the following expression in the REPL:
 
-    let create (low : endpoint) (high : endpoint) : interval =
-      if Endpoint.compare low high > 0 then Empty
-      else Interval (low, high)
+    IntSafeInterval.create 2 3 ;;
 
-    let is_empty (intvl : interval) : bool =
-      match intvl with
-      | Empty -> true
-      | Interval _ -> false
+   A type error will appear:
 
-    let contains (intvl : interval) (x : Endpoint.t) : bool =
-      match intvl with
-      | Empty -> false
-      | Interval (low, high) ->
-         Endpoint.compare x low >= 0
-         && Endpoint.compare x high <= 0
+    Error: This expression has type int but an expression was expected of type
+           IntInterval.endpoint
 
-    let intersect (intvl1 : interval) (intvl2 : interval) : interval =
-      let ordered x y = if Endpoint.compare x y <= 0 then x, y else y, x in
-      match intvl1, intvl2 with
-      | Empty, _
-      | _, Empty -> Empty
-      | Interval (low1, high1), Interval (low2, high2) ->
-         let (_, low), (high, _)  = ordered low1 low2, ordered high1 high2 in
-         create low high
-  end
+   To make the interface slightly less abstract, we can make use of a
+   sharing constraint, which informs the compiler that a given type
+   within the implementation is equal to some other type from outside the
+   implementation. In this case, we want to inform the compiler the type
+   of our endpoint is an int, and more generally that the type of our
+   endpoint is Endpoint.t, where Endpoint was the ORDERED_TYPE module
+   inputted to the functor. We can do so with the following syntax:
+
+   <Module_type> with type <type> = <type'>
+
+   For instance, we can create int interval and float interval interfaces
+   that reveal the type of endpoints as follows: *)
+
+module type INT_INTERVAL =
+  INTERVAL with type endpoint = int ;;
+
+module type FLOAT_INTERVAL =
+  INTERVAL with type endpoint = float ;;
+
+(* Modules that satisfy these interfaces will allow users to actually
+   construct intervals of the desired types.
+
+   While sharing constraints solve the abstraction issue discussed
+   earlier, they now present a new problem. They will result in code
+   duplication in implementation. The solution to this is to use sharing
+   constraints in the MakeInterval functor, exposing that the type of an
+   endpoint is equal to Endpoint.t. The functor can then be used to
+   create interval modules of various types without duplicating code. *)
+
+(*......................................................................
+  Exercise 3A: Define a new functor MakeBestInterval. It should take an
+  ORDERED_TYPE module for the endpoints of the intervals, and return a
+  module satisfying INTERVAL *with appropriate sharing constraints
+  to allow the creation of generic interval modules*.
+  ......................................................................*)
+
+module MakeBestInterval (Endpoint : ORDERED_TYPE)
+  : (INTERVAL with type endpoint = Endpoint.t) =
+struct
+  type endpoint = Endpoint.t
+  type interval = | Interval of endpoint * endpoint
+                  | Empty
+
+  (* create low high -- Returns a new interval covering `low` to
+     `high` inclusive. If `low` > `high`, then the interval is
+     empty. *)
+  let create (low : endpoint) (high : endpoint) : interval =
+    if Endpoint.compare low high > 0 then Empty
+    else Interval (low, high)
+
+  (* is_empty intvl -- Returns true if and only if the `intvl` is
+     empty *)
+  let is_empty (intvl : interval) : bool =
+    match intvl with
+    | Empty -> true
+    | Interval _ -> false
+
+  (* contains intvl x -- Returns true if and only if the value `x`
+     is contained within `intvl` *)
+  let contains (intvl : interval) (x : Endpoint.t) : bool =
+    match intvl with
+    | Empty -> false
+    | Interval (low, high) ->
+      Endpoint.compare x low >= 0
+      && Endpoint.compare x high <= 0
+
+  (* intersect intvl1 intvl2 -- Returns the intersection of the two
+     input intervals *)
+  let intersect (intvl1 : interval) (intvl2 : interval) : interval =
+    let ordered x y = if Endpoint.compare x y <= 0 then x, y else y, x in
+    match intvl1, intvl2 with
+    | Empty, _
+    | _, Empty -> Empty
+    | Interval (low1, high1), Interval (low2, high2) ->
+      let (_, low), (high, _)  = ordered low1 low2, ordered high1 high2 in
+      create low high
+end
 ;;
+
+(* We now have a fully functioning functor that can create interval
+   modules of whatever type we want, with the appropriate abstraction
+   level.
+
+   ........................................................................
+   Exercise 3B: Use the MakeBestInterval functor to create a new int
+   interval module, and test that it works as expected.
+
+   You may for instance want to try the problematic lines from Exercise 1C.
+
+   This expression should still return true, as expected:
+
+    IntBestInterval.is_empty (IntBestInterval.create 4 3) ;;
+
+   This expression should no longer return false. What does it return
+   instead?
+
+    IntBestInterval.is_empty (IntBestInterval.Interval (4, 3)) ;;
+   ......................................................................*)
 
 module IntBestInterval =
   MakeBestInterval
@@ -287,33 +375,3 @@ module IntBestInterval =
       type t = int
       let compare = Stdlib.compare
     end) ;;
-
-
-(*......................................................................
-Exercise 3A: Define a new functor MakeBestInterval. It should take an
-ORDERED_TYPE module for the endpoints of the intervals, and return a
-module satisfying INTERVAL *with appropriate sharing constraints
-to allow the creation of generic interval modules*.
-......................................................................*)
-
-
-
-(* We now have a fully functioning functor that can create interval
-modules of whatever type we want, with the appropriate abstraction
-level.
-
-........................................................................
-Exercise 3B: Use the MakeBestInterval functor to create a new int
-interval module, and test that it works as expected.
-
-You may for instance want to try the problematic lines from Exercise 1C.
-
-This expression should still return true, as expected:
-
-    IntBestInterval.is_empty (IntBestInterval.create 4 3) ;;
-
-This expression should no longer return false. What does it return
-instead?
-
-    IntBestInterval.is_empty (IntBestInterval.Interval (4, 3)) ;;
-......................................................................*)
