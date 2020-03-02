@@ -94,55 +94,60 @@ leaking out of the module.)
 ......................................................................*)
 
 module MakeStack (Element: SERIALIZE) : (STACK with type element = Element.t) =
-  struct
-    exception Empty
+struct
+  exception Empty
 
-    type element = Element.t
-    type stack = element list
+  type element = Element.t
+  type stack = element list
 
-    let empty : stack = []
+  let empty : stack = []
 
-    let push (el : element) (s : stack) : stack =
-      el :: s
+  let push (el : element) (s : stack) : stack =
+    el :: s
 
-    let pop_helper (s : stack) : (element * stack) =
-      match s with
-      | [] -> raise Empty
-      | h :: t -> (h, t)
+  let pop_helper (s : stack) : (element * stack) =
+    match s with
+    | [] -> raise Empty
+    | h :: t -> (h, t)
 
-    let top (s : stack) : element =
-      fst (pop_helper s)
+  let top (s : stack) : element =
+    fst (pop_helper s)
 
-    let pop (s : stack) : stack =
-      snd (pop_helper s)
+  let pop (s : stack) : stack =
+    snd (pop_helper s)
 
-    let map : (element -> element) -> stack -> stack =
-      List.map
+  let map : (element -> element) -> stack -> stack =
+    List.map
 
-    let filter : (element -> bool) -> stack -> stack =
-      List.filter
+  let filter : (element -> bool) -> stack -> stack =
+    List.filter
 
-    let fold_left : ('a -> element -> 'a) -> 'a -> stack -> 'a =
-      List.fold_left
+  let fold_left : ('a -> element -> 'a) -> 'a -> stack -> 'a =
+    List.fold_left
 
-    let serialize (s : stack) : string =
-      let string_join x y = Element.serialize y
-                  ^ (if x <> "" then ":" ^ x else "") in
-      fold_left string_join "" s
-  end ;;
+  let serialize (s : stack) : string =
+    let string_join x y = Element.serialize y
+                          ^ (if x <> "" then ":" ^ x else "") in
+    fold_left string_join "" s
+end ;;
+
 (*......................................................................
-Exercise 1B: Now, make a module `IntStack` by applying the functor
-that you just defined to an appropriate module for serializing integers.
-......................................................................*)
+  Exercise 1B: Now, make a module `IntStack` by applying the functor
+  that you just defined to an appropriate module for serializing integers.
+  ......................................................................*)
+
+(* In the following solution, we are explicit about all module types,
+   while providing appropriate sharing constraints. *)
 
 module IntSerialize : (SERIALIZE with type t = int) =
-  struct
-    type t = int
-    let serialize = string_of_int
-  end ;;
+struct
+  type t = int
+  let serialize = string_of_int
+end ;;
 
 module IntStack : (STACK with type element = IntSerialize.t) =
   MakeStack(IntSerialize) ;;
+
 
 (*......................................................................
 Exercise 1C: Make a module `IntStringStack` that creates a stack whose
